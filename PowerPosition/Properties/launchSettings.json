@@ -2,9 +2,6 @@
   "profiles": {
     "PowerPosition": {
       "commandName": "Project"
-    },
-    "Container (Dockerfile)": {
-      "commandName": "Docker"
     }
   }
 }

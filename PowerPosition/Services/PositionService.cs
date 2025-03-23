@@ -1,19 +1,21 @@
 ﻿using Axpo;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace PowerPosition;
 
-internal class PositionService(PowerService powerService, IOptions<PositionServiceOptions> options) : BackgroundService
+public class PositionService(ILogger<PositionService> logger, IPowerServiceWrapper powerService, IOptions<PositionServiceOptions> options) 
+    : BackgroundService
 {
-    private readonly PowerService _powerService = powerService ?? throw new ArgumentNullException(nameof(powerService));
+    private readonly ILogger<PositionService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly IPowerServiceWrapper _powerService = powerService ?? throw new ArgumentNullException(nameof(powerService));
     private readonly PositionServiceOptions _options = options.Value ?? throw new ArgumentNullException(nameof(options));
     private readonly TimeZoneInfo _timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(options.Value.Location);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var requestDate = DateTime.UtcNow;
-        var interval = _options.IntervalInSeconds;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -25,10 +27,10 @@ internal class PositionService(PowerService powerService, IOptions<PositionServi
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                _logger.LogError(ex, "An error occurred while executing the background service.");
             }
-            requestDate += TimeSpan.FromSeconds(interval);
-            var remaining = requestDate - DateTime.Now;
+            requestDate += TimeSpan.FromSeconds(_options.IntervalInSeconds);
+            var remaining = requestDate - DateTime.UtcNow;
             if (remaining > TimeSpan.Zero)
             {
                 await Task.Delay(remaining, stoppingToken);
@@ -36,7 +38,7 @@ internal class PositionService(PowerService powerService, IOptions<PositionServi
         }
     }
 
-    private async Task<IEnumerable<PowerTrade>> GetTradesWithRetry(DateTime tradedDate, DateTime requestDate)
+    internal async Task<IEnumerable<PowerTrade>> GetTradesWithRetry(DateTime tradedDate, DateTime requestDate)
     {
         var delay = _options.RetryDelayInMilliseconds;
         var limitDate = requestDate.AddSeconds(_options.RetryLimitInSeconds);
@@ -48,14 +50,14 @@ internal class PositionService(PowerService powerService, IOptions<PositionServi
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"{nameof(powerService.GetTradesAsync)} failed: {ex.Message}. Retrying in {delay} ms...");
+                _logger.LogWarning(ex, "{MethodName} failed. Retrying in {Delay} ms...", nameof(_powerService.GetTradesAsync), delay);
                 await Task.Delay(delay);
             }
         }
         throw new TimeoutException($"Failed to get trades for {requestDate:yyyy-MM-ddTHH:mm:ssZ} within the time limit.");
     }
 
-    private IEnumerable<Position> GetPositions(IEnumerable<PowerTrade> trades)
+    internal IEnumerable<Position> GetPositions(IEnumerable<PowerTrade> trades)
     {
         Dictionary<DateTime, double> positions = [];
         foreach (var trade in trades)
@@ -76,13 +78,14 @@ internal class PositionService(PowerService powerService, IOptions<PositionServi
                 }
             }
         }
-        return positions.Select(v => new Position(v.Key, v.Value));
+        return positions.Select(v => new Position(v.Key, v.Value)).OrderBy(v => v.Date);
     }
 
     private async Task SavePositionsFile(DateTime tradedDate, DateTime requestDate, IEnumerable<Position> positions)
     {
         var fileName = $"PowerPosition_{tradedDate:yyyyMMdd}_{requestDate:yyyyMMddHHmm}.csv";
-        var filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
+        var filePath = Path.Combine(_options.OutputFilePath, fileName);
+        Directory.CreateDirectory(_options.OutputFilePath);
 
         using (var writer = new StreamWriter(filePath))
         {
@@ -93,6 +96,6 @@ internal class PositionService(PowerService powerService, IOptions<PositionServi
             }
         }
 
-        Console.WriteLine($"Positions saved to {filePath}");
+        _logger.LogInformation($"Positions saved to {filePath}");
     }
 }

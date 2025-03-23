@@ -6,4 +6,6 @@ public class PositionServiceOptions
     public int RetryLimitInSeconds { get; set; }
     public int RetryDelayInMilliseconds { get; set; }
     public required string Location { get; set; }
+    public required string OutputFilePath { get; set; }
+
 }
