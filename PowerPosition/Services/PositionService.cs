@@ -2,10 +2,14 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Globalization;
 
 namespace PowerPosition;
 
-public class PositionService(ILogger<PositionService> logger, IPowerServiceWrapper powerService, IOptions<PositionServiceOptions> options) 
+/// <summary>
+/// Background service for processing and saving power positions.
+/// </summary>
+public class PositionService(ILogger<PositionService> logger, IPowerServiceWrapper powerService, IOptions<PositionServiceOptions> options)
     : BackgroundService
 {
     private readonly ILogger<PositionService> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -13,6 +17,7 @@ public class PositionService(ILogger<PositionService> logger, IPowerServiceWrapp
     private readonly PositionServiceOptions _options = options.Value ?? throw new ArgumentNullException(nameof(options));
     private readonly TimeZoneInfo _timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(options.Value.Location);
 
+    /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var requestDate = DateTime.UtcNow;
@@ -22,7 +27,7 @@ public class PositionService(ILogger<PositionService> logger, IPowerServiceWrapp
             {
                 var tradedDate = requestDate.Date.AddDays(1);
                 var trades = await GetTradesWithRetry(tradedDate, requestDate);
-                var positions = GetPositions(trades);
+                var positions = CalculatePositions(trades);
                 await SavePositionsFile(tradedDate, requestDate, positions);
             }
             catch (Exception ex)
@@ -38,6 +43,12 @@ public class PositionService(ILogger<PositionService> logger, IPowerServiceWrapp
         }
     }
 
+    /// <summary>
+    /// Gets the power trades with retry logic.
+    /// </summary>
+    /// <param name="tradedDate">The date of the trades.</param>
+    /// <param name="requestDate">The request date.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the power trades.</returns>
     internal async Task<IEnumerable<PowerTrade>> GetTradesWithRetry(DateTime tradedDate, DateTime requestDate)
     {
         var delay = _options.RetryDelayInMilliseconds;
@@ -57,7 +68,12 @@ public class PositionService(ILogger<PositionService> logger, IPowerServiceWrapp
         throw new TimeoutException($"Failed to get trades for {requestDate:yyyy-MM-ddTHH:mm:ssZ} within the time limit.");
     }
 
-    internal IEnumerable<Position> GetPositions(IEnumerable<PowerTrade> trades)
+    /// <summary>
+    /// Calculates the positions from the power trades.
+    /// </summary>
+    /// <param name="trades">The power trades.</param>
+    /// <returns>A collection of positions.</returns>
+    internal IEnumerable<Position> CalculatePositions(IEnumerable<PowerTrade> trades)
     {
         Dictionary<DateTime, double> positions = [];
         foreach (var trade in trades)
@@ -81,19 +97,24 @@ public class PositionService(ILogger<PositionService> logger, IPowerServiceWrapp
         return positions.Select(v => new Position(v.Key, v.Value)).OrderBy(v => v.Date);
     }
 
+    /// <summary>
+    /// Saves the positions to a CSV file.
+    /// </summary>
+    /// <param name="tradedDate">The traded date.</param>
+    /// <param name="requestDate">The request date.</param>
+    /// <param name="positions">The positions to save.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
     private async Task SavePositionsFile(DateTime tradedDate, DateTime requestDate, IEnumerable<Position> positions)
     {
         var fileName = $"PowerPosition_{tradedDate:yyyyMMdd}_{requestDate:yyyyMMddHHmm}.csv";
         var filePath = Path.Combine(_options.OutputFilePath, fileName);
         Directory.CreateDirectory(_options.OutputFilePath);
 
-        using (var writer = new StreamWriter(filePath))
+        using var writer = new StreamWriter(filePath);
+        await writer.WriteLineAsync("Datetime;Volume");
+        foreach (var position in positions)
         {
-            await writer.WriteLineAsync("Datetime;Volume");
-            foreach (var position in positions)
-            {
-                await writer.WriteLineAsync($"{position.Date:yyyy-MM-ddTHH:mm:ssZ};{position.Volume}");
-            }
+            await writer.WriteLineAsync($"{position.Date:yyyy-MM-ddTHH:mm:ssZ};{position.Volume.ToString("F", CultureInfo.InvariantCulture)}");
         }
 
         _logger.LogInformation($"Positions saved to {filePath}");

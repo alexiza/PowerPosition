@@ -7,7 +7,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerPosition", "PowerPosit
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{1A7199FE-5299-4309-B240-3C65F810ABA8}"
 	ProjectSection(SolutionItems) = preProject
+		..\assets\developmentchallenge-powertrade.pdf = ..\assets\developmentchallenge-powertrade.pdf
 		..\assets\PowerService\netstandard2.0\PowerService.dll = ..\assets\PowerService\netstandard2.0\PowerService.dll
+		..\README.md = ..\README.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerPositionTests", "..\PowerPositionTests\PowerPositionTests.csproj", "{E82844D5-A5D7-4886-859D-8E5773EC3DEB}"

@@ -1,8 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
-using PowerPosition;
 using Axpo;
+
+namespace PowerPosition.Tests;
 
 public class PositionServiceTests
 {
@@ -28,7 +29,7 @@ public class PositionServiceTests
     }
 
     [Fact]
-    public void GetPositions_ShouldReturnCorrectPositions()
+    public void CalculatePositions_ShouldReturnCorrectPositions()
     {
         // Arrange
         var positionService = new PositionService(_loggerMock.Object, _powerServiceWrapperMock.Object, _optionsMock.Object);
@@ -44,7 +45,7 @@ public class PositionServiceTests
             trades[1].Periods[p].SetVolume(100 * (24 - p));
         }
         // Act
-        var positions = positionService.GetPositions(trades);
+        var positions = positionService.CalculatePositions(trades);
 
         // Assert
         Assert.NotNull(positions);
